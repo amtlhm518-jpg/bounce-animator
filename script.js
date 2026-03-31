@@ -1149,8 +1149,95 @@ function setMode(m, el, label) {
 loadChar('cat', document.querySelector('.cbtn'));
 
 // ═══════════════════════════════════════
+// Fullscreen
+// ═══════════════════════════════════════
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen();
+  }
+}
+
+// ═══════════════════════════════════════
 // PWA Service Worker
 // ═══════════════════════════════════════
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
+
+// ═══════════════════════════════════════
+// PWA Install Prompt
+// ═══════════════════════════════════════
+let deferredPrompt = null;
+const installBanner = document.getElementById('install-banner');
+const installGuide = document.getElementById('install-guide');
+
+// 플랫폼 감지
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+const isAndroid = /Android/.test(navigator.userAgent);
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  showInstallBanner();
+});
+
+function showInstallBanner() {
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true;
+  if (!isStandalone && !localStorage.getItem('install-dismissed')) {
+    installBanner.classList.add('show');
+  }
+}
+
+setTimeout(() => {
+  if (!deferredPrompt) showInstallBanner();
+}, 1500);
+
+function doInstall() {
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then(() => {
+      deferredPrompt = null;
+      installBanner.classList.remove('show');
+    });
+  } else {
+    showInstallGuide();
+  }
+}
+
+function showInstallGuide() {
+  installBanner.classList.remove('show');
+  // 플랫폼에 맞는 가이드 표시
+  const iosSection = document.getElementById('guide-ios');
+  const androidSection = document.getElementById('guide-android');
+  if (isIOS) {
+    iosSection.classList.add('active');
+    androidSection.classList.remove('active');
+  } else if (isAndroid) {
+    androidSection.classList.add('active');
+    iosSection.classList.remove('active');
+  } else {
+    // 데스크톱 등 - 둘 다 표시
+    iosSection.classList.add('active');
+    androidSection.classList.add('active');
+  }
+  installGuide.classList.add('show');
+}
+
+function closeGuide(e) {
+  if (!e || e.target === installGuide || e.target.classList.contains('guide-close')) {
+    installGuide.classList.remove('show');
+  }
+}
+
+function dismissInstall() {
+  installBanner.classList.remove('show');
+  localStorage.setItem('install-dismissed', '1');
+}
+
+window.addEventListener('appinstalled', () => {
+  installBanner.classList.remove('show');
+  deferredPrompt = null;
+});

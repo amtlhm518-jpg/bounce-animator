@@ -3,7 +3,7 @@
   "short_name": "Bounce",
   "description": "Draw and animate your characters!",
   "start_url": "./index.html",
-  "display": "standalone",
+  "display": "fullscreen",
   "orientation": "portrait",
   "background_color": "#ffffff",
   "theme_color": "#9333ea",
