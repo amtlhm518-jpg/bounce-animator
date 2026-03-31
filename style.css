@@ -141,10 +141,10 @@ html, body { height: 100%; background: #f5f0ff; }
   overflow: hidden;
 }
 
-@media (min-width: 600px) {
+@media (min-width: 1024px) {
   #phone {
-    max-width: 420px;
-    height: 700px;
+    max-width: 900px;
+    height: 500px;
     margin: 20px auto;
     border-radius: 20px;
     box-shadow: 0 8px 32px rgba(150,100,200,0.18);
@@ -439,3 +439,31 @@ html, body { height: 100%; background: #f5f0ff; }
 .intensity-label { font-size: 10px; font-weight: 700; color: #9333ea; white-space: nowrap; }
 .intensity-bar input[type=range] { flex: 1; accent-color: #9333ea; height: 3px; }
 .intensity-val { font-size: 10px; color: #b48ab4; width: 22px; text-align: right; }
+
+/* ── 회전 안내 오버레이 ── */
+#rotate-msg {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: linear-gradient(135deg, #9333ea, #6d28d9);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+#rotate-msg.show { display: flex; }
+.rotate-icon {
+  font-size: 64px;
+  animation: rotateHint 1.5s ease-in-out infinite;
+}
+@keyframes rotateHint {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(90deg); }
+}
+.rotate-text {
+  color: white;
+  font-size: 18px;
+  font-weight: 800;
+  font-family: -apple-system, 'Segoe UI', sans-serif;
+}

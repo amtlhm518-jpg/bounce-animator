@@ -1149,15 +1149,36 @@ function setMode(m, el, label) {
 loadChar('cat', document.querySelector('.cbtn'));
 
 // ═══════════════════════════════════════
-// Fullscreen
+// Fullscreen + Landscape Lock
 // ═══════════════════════════════════════
 function toggleFullscreen() {
   if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen().catch(() => {});
+    document.documentElement.requestFullscreen().then(() => {
+      try { screen.orientation.lock('landscape').catch(() => {}); } catch(e) {}
+    }).catch(() => {});
   } else {
     document.exitFullscreen();
   }
 }
+
+// 자동으로 가로 잠금 시도
+try {
+  screen.orientation.lock('landscape').catch(() => {});
+} catch(e) {}
+
+// 세로로 들고 있으면 회전 안내 표시
+function checkOrientation() {
+  const rotateMsg = document.getElementById('rotate-msg');
+  if (!rotateMsg) return;
+  if (window.innerHeight > window.innerWidth && window.innerWidth < 600) {
+    rotateMsg.classList.add('show');
+  } else {
+    rotateMsg.classList.remove('show');
+  }
+}
+window.addEventListener('resize', checkOrientation);
+window.addEventListener('orientationchange', checkOrientation);
+setTimeout(checkOrientation, 500);
 
 // ═══════════════════════════════════════
 // PWA Service Worker
