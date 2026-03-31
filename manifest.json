@@ -1,0 +1,13 @@
+{
+  "name": "Bounce Animator",
+  "short_name": "Bounce",
+  "description": "Draw and animate your characters!",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#9333ea",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

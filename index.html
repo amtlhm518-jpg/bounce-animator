@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#9333ea">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Bounce Animator</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+</head>
+<body>
+
+<div id="phone">
+
+  <!-- ── 그리기 화면 ── -->
+  <div id="draw-view">
+    <div class="panel-header">
+      <span>✏️ 그리기</span>
+      <button class="hbtn" onclick="undo()" title="Ctrl+Z">↩</button>
+      <button class="hbtn" onclick="redo()" title="Ctrl+Y">↪</button>
+      <span class="sub" id="pen-name">기본 펜</span>
+      <button class="palette-btn" id="palette-btn" onclick="togglePalette()">🎨 도구</button>
+      <button class="tbtn go" onclick="startAnim()" style="margin-left:4px">▶ Play!</button>
+    </div>
+
+    <div class="draw-wrap">
+      <canvas id="bg-canvas"></canvas>
+      <canvas id="draw-canvas"></canvas>
+      <div id="brush-cursor"></div>
+      <div class="hint" id="hint">
+        <span class="icon">🖌️</span>여기에 그리세요
+      </div>
+      <div id="bg-preview">
+        <canvas id="bg-preview-canvas"></canvas>
+        <span id="bg-preview-label"></span>
+      </div>
+    </div>
+
+    <!-- 슬라이드업 도구 패널 -->
+    <div class="tool-bar" id="tool-bar">
+      <div class="tool-handle" onclick="togglePalette()"></div>
+
+      <div class="pen-row">
+        <span class="row-label">펜</span>
+        <button class="pbtn active" onclick="setPen('pen',this)">🖊</button>
+        <button class="pbtn" onclick="setPen('marker',this)">🖍</button>
+        <button class="pbtn" onclick="setPen('brush',this)">🖌</button>
+        <button class="pbtn" onclick="setPen('crayon',this)">✏️</button>
+        <button class="pbtn" onclick="setPen('spray',this)">💨</button>
+        <div style="flex:1"></div>
+        <span class="size-label">굵기 <input type="range" id="bsize" min="2" max="30" value="9"></span>
+      </div>
+
+      <div class="bg-row">
+        <span class="row-label">배경</span>
+        <button class="bgbtn active" onclick="setBg('sky',this)">🌤 하늘</button>
+        <button class="bgbtn" onclick="setBg('night',this)">🌙 밤</button>
+        <button class="bgbtn" onclick="setBg('ocean',this)">🌊 바다</button>
+        <button class="bgbtn" onclick="setBg('space',this)">🌌 우주</button>
+        <button class="bgbtn" onclick="setBg('classroom',this)">🏫 교실</button>
+        <button class="bgbtn" onclick="setBg('park',this)">🌳 공원</button>
+        <button class="bgbtn" onclick="setBg('home',this)">🏠 집</button>
+      </div>
+
+      <div class="color-row">
+        <div class="cdot active" style="background:#ff8fab" onclick="setColor('#ff8fab',this)"></div>
+        <div class="cdot" style="background:#fde68a" onclick="setColor('#fde68a',this)"></div>
+        <div class="cdot" style="background:#c084fc" onclick="setColor('#c084fc',this)"></div>
+        <div class="cdot" style="background:#34d399" onclick="setColor('#34d399',this)"></div>
+        <div class="cdot" style="background:#60a5fa" onclick="setColor('#60a5fa',this)"></div>
+        <div class="cdot" style="background:#fb923c" onclick="setColor('#fb923c',this)"></div>
+        <div class="cdot" style="background:#f43f5e" onclick="setColor('#f43f5e',this)"></div>
+        <div class="cdot" style="background:#1e293b" onclick="setColor('#1e293b',this)"></div>
+        <div class="cdot" style="background:#fff;border:2px solid #ddd" onclick="setColor('#ffffff',this)"></div>
+        <div class="eraser" id="eraser-btn" onclick="toggleEraser()">✕</div>
+      </div>
+
+      <div class="bottom-row">
+        <span class="row-label">밑그림</span>
+        <button class="cbtn active" onclick="loadChar('cat',this)">😺</button>
+        <button class="cbtn" onclick="loadChar('boy',this)">👦</button>
+        <button class="cbtn" onclick="loadChar('girl',this)">👧</button>
+        <button class="cbtn" onclick="loadChar('dog',this)">🐶</button>
+        <button class="cbtn" onclick="loadChar('rabbit',this)">🐰</button>
+        <div style="flex:1"></div>
+        <button class="tbtn" onclick="saveDraw()">💾 저장</button>
+        <button class="tbtn" onclick="document.getElementById('load-input').click()">📂 열기</button>
+        <input type="file" id="load-input" accept="image/*" style="display:none" onchange="loadDraw(this)">
+        <button class="tbtn" onclick="clearDraw()">🗑</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 애니메이션 화면 ── -->
+  <div id="anim-view">
+    <div class="panel-header">
+      <button class="back-btn" onclick="showDraw()">← Back</button>
+      <span class="sub" id="mode-label">Walk</span>
+    </div>
+
+    <div class="anim-wrap">
+      <canvas id="anim-canvas"></canvas>
+    </div>
+
+    <div class="mode-bar">
+      <button class="mbtn active" onclick="setMode('walk',this,'Walk')">🚶 Walk!</button>
+      <button class="mbtn" onclick="setMode('jump',this,'Jump')">🦘 Jump!</button>
+      <button class="mbtn" onclick="setMode('excited',this,'Run')">⚡ Run!</button>
+    </div>
+
+    <div class="intensity-bar">
+      <span class="intensity-label">🔥 Speed</span>
+      <input type="range" id="intensity-slider" min="1" max="100" value="70"
+        oninput="intensity=this.value/100; document.getElementById('intensity-val').textContent=this.value">
+      <span class="intensity-val" id="intensity-val">70</span>
+    </div>
+  </div>
+
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
