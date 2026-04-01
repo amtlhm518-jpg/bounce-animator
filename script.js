@@ -398,14 +398,15 @@ function drawOneLimb(ctx, name, limb, cx, cy) {
 function getLimbAtPoint(px, py) {
   const cx = LC.width / 2, cy = LC.height / 2;
   const parts = CHARACTER_PARTS[currentChar];
-  let closest = null, closestDist = 35;
+  let closest = null, closestDist = 18;
   for (const [name, limb] of Object.entries(parts.limbs)) {
     const pivotX = cx + limb.pivot.x;
     const pivotY = cy + limb.pivot.y;
     const angle = limbAngles[name] || 0;
-    const midX = pivotX + Math.cos(angle) * limb.len / 2;
-    const midY = pivotY + Math.sin(angle) * limb.len / 2;
-    const dist = Math.hypot(px - midX, py - midY);
+    // 팔다리 끝부분 (tip) 근처만 감지
+    const tipX = pivotX + Math.cos(angle) * limb.len * 0.8;
+    const tipY = pivotY + Math.sin(angle) * limb.len * 0.8;
+    const dist = Math.hypot(px - tipX, py - tipY);
     if (dist < closestDist) { closest = name; closestDist = dist; }
   }
   return closest;
