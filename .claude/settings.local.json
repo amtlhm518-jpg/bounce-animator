@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh auth:*)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" auth status)",
+      "Bash(\"/c/Users/$USER/AppData/Local/GitHub CLI/gh.exe\" auth status)",
+      "Bash(cmd //c \"gh auth status\")",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" auth login --web)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" api user --jq '.login,.email')",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" repo create bounce-animator --public --source=D:/work2026/toyproject --push)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" api repos/amtlhm518-jpg/bounce-animator/pages -X POST -f build_type=workflow -f source[branch]=master -f source[path]=\"/\")",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" api repos/amtlhm518-jpg/bounce-animator/pages -X POST -f source[branch]=master -f source[path]=\"/\")",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" run list --repo amtlhm518-jpg/bounce-animator --limit 1)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8080/)",
+      "Bash(npx --yes sharp-cli --help)",
+      "Bash(npx sharp-cli:*)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" run list --limit 3)",
+      "Bash(curl -s http://localhost:8090/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8090/index.html)",
+      "Bash(node --check script.js)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8091/index.html)"
+    ]
+  }
+}

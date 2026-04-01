@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <meta name="screen-orientation" content="landscape">
   <meta name="theme-color" content="#9333ea">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -16,71 +15,6 @@
 </head>
 <body>
 
-<!-- ── 설치 배너 ── -->
-<div id="install-banner">
-  <div class="install-card">
-    <div class="install-icon">🎨</div>
-    <div class="install-text">
-      <strong>Bounce Animator</strong>
-      <span>홈 화면에 추가하면 앱처럼 사용할 수 있어요!</span>
-    </div>
-    <button id="install-btn" onclick="doInstall()">설치하기</button>
-    <button class="install-close" onclick="dismissInstall()">✕</button>
-  </div>
-</div>
-
-<!-- ── 설치 가이드 오버레이 ── -->
-<div id="install-guide" onclick="closeGuide(event)">
-  <div class="guide-card">
-    <button class="guide-close" onclick="closeGuide()">✕</button>
-    <h2>📲 앱 설치 방법</h2>
-
-    <div id="guide-ios" class="guide-section">
-      <p class="guide-title">iPhone / iPad (Safari)</p>
-      <div class="guide-steps">
-        <div class="guide-step">
-          <div class="step-num">1</div>
-          <div class="step-icon">⬆️</div>
-          <div class="step-desc">하단의 <strong>공유 버튼</strong>을 누르세요</div>
-        </div>
-        <div class="guide-step">
-          <div class="step-num">2</div>
-          <div class="step-icon">➕</div>
-          <div class="step-desc"><strong>홈 화면에 추가</strong>를 선택하세요</div>
-        </div>
-        <div class="guide-step">
-          <div class="step-num">3</div>
-          <div class="step-icon">✅</div>
-          <div class="step-desc"><strong>추가</strong>를 누르면 완료!</div>
-        </div>
-      </div>
-    </div>
-
-    <div id="guide-android" class="guide-section">
-      <p class="guide-title">Android (Chrome)</p>
-      <div class="guide-steps">
-        <div class="guide-step">
-          <div class="step-num">1</div>
-          <div class="step-icon">⋮</div>
-          <div class="step-desc">우측 상단 <strong>메뉴(⋮)</strong>를 누르세요</div>
-        </div>
-        <div class="guide-step">
-          <div class="step-num">2</div>
-          <div class="step-icon">📲</div>
-          <div class="step-desc"><strong>홈 화면에 추가</strong> 또는<br><strong>앱 설치</strong>를 선택하세요</div>
-        </div>
-        <div class="guide-step">
-          <div class="step-num">3</div>
-          <div class="step-icon">✅</div>
-          <div class="step-desc"><strong>설치</strong>를 누르면 완료!</div>
-        </div>
-      </div>
-    </div>
-
-    <p class="guide-footer">설치 후 홈 화면에서 앱 아이콘을 탭하세요! 🎨</p>
-  </div>
-</div>
-
 <div id="phone">
 
   <!-- ── 그리기 화면 ── -->
@@ -91,7 +25,6 @@
       <button class="hbtn" onclick="redo()" title="Ctrl+Y">↪</button>
       <span class="sub" id="pen-name">기본 펜</span>
       <button class="palette-btn" id="palette-btn" onclick="togglePalette()">🎨 도구</button>
-      <button class="hbtn" id="fs-btn" onclick="toggleFullscreen()" title="전체화면">⛶</button>
       <button class="tbtn go" onclick="startAnim()" style="margin-left:4px">▶ Play!</button>
     </div>
 
@@ -168,7 +101,6 @@
     <div class="panel-header">
       <button class="back-btn" onclick="showDraw()">← Back</button>
       <span class="sub" id="mode-label">Walk</span>
-      <button class="hbtn" onclick="toggleFullscreen()" title="전체화면">⛶</button>
     </div>
 
     <div class="anim-wrap">
@@ -189,12 +121,6 @@
     </div>
   </div>
 
-</div>
-
-<!-- ── 회전 안내 ── -->
-<div id="rotate-msg">
-  <div class="rotate-icon">📱↔️</div>
-  <div class="rotate-text">화면을 가로로 돌려주세요!</div>
 </div>
 
 <script src="script.js"></script>

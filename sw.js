@@ -1,4 +1,4 @@
-const CACHE = 'bounce-v4';
+const CACHE = 'bounce-v1';
 const FILES = [
   './',
   './index.html',
