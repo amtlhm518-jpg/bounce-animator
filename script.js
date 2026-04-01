@@ -5,6 +5,10 @@ const DC  = document.getElementById('draw-canvas');
 const dctx = DC.getContext('2d');
 const BGC = document.getElementById('bg-canvas');
 const bgctx = BGC.getContext('2d');
+const TC  = document.getElementById('template-canvas');
+const tctx = TC.getContext('2d');
+const LC  = document.getElementById('limb-canvas');
+const lctx = LC.getContext('2d');
 const AC  = document.getElementById('anim-canvas');
 const actx = AC.getContext('2d');
 const brushCursor = document.getElementById('brush-cursor');
@@ -18,6 +22,454 @@ let charX = 0, charVx = 1.4;
 let intensity = 0.7;
 let spriteBounds = null, spriteCache = null, hasDrawn = false;
 let wasInAir = false, lastStepT = 0;
+
+// ═══════════════════════════════════════
+// CHARACTER PARTS (디자이너 PNG 교체 가능)
+// ═══════════════════════════════════════
+let currentChar = 'cat';
+let bodyMaskPath = null;
+let limbAngles = {};
+let draggingLimb = null;
+let blinkTimer = 0, blinkState = 'open';
+
+const CHARACTER_PARTS = {
+  cat: {
+    body: {
+      draw(ctx, cx, cy) {
+        ctx.fillStyle = '#fde68a';
+        ctx.beginPath(); ctx.ellipse(cx, cy, 38, 46, 0, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 2.5; ctx.stroke();
+      },
+      mask(cx, cy) { const p = new Path2D(); p.ellipse(cx, cy, 38, 46, 0, 0, Math.PI*2); return p; }
+    },
+    eyes: {
+      open(ctx, cx, cy) {
+        ctx.fillStyle = '#1e293b';
+        ctx.beginPath(); ctx.arc(cx-13, cy-10, 5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx+13, cy-10, 5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'white';
+        ctx.beginPath(); ctx.arc(cx-10, cy-13, 2, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx+16, cy-13, 2, 0, Math.PI*2); ctx.fill();
+      },
+      closed(ctx, cx, cy) {
+        ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.arc(cx-13, cy-10, 4, 0.3, Math.PI-0.3); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx+13, cy-10, 4, 0.3, Math.PI-0.3); ctx.stroke();
+      }
+    },
+    decorations: {
+      draw(ctx, cx, cy) {
+        // 입
+        ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.arc(cx, cy+4, 13, 0.2, Math.PI-0.2); ctx.stroke();
+        // 볼터치
+        ctx.fillStyle = 'rgba(255,182,193,0.55)';
+        ctx.beginPath(); ctx.ellipse(cx-24, cy+6, 9, 6, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(cx+24, cy+6, 9, 6, 0, 0, Math.PI*2); ctx.fill();
+        // 귀
+        ctx.fillStyle = '#fde68a'; ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(cx-36, cy-26, 9, 13, -0.4, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(cx+36, cy-26, 9, 13,  0.4, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+      }
+    },
+    limbs: {
+      armL: {
+        draw(ctx) { ctx.fillStyle = '#fde68a'; ctx.beginPath(); ctx.ellipse(0, 14, 7, 18, -0.2, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#f59e0b'; ctx.lineWidth=1.5; ctx.stroke(); },
+        pivot: {x:-36, y:4}, len: 28, default: -0.4, range: [-2.2, 0.8], zBehind: true
+      },
+      armR: {
+        draw(ctx) { ctx.fillStyle = '#fde68a'; ctx.beginPath(); ctx.ellipse(0, 14, 7, 18, 0.2, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#f59e0b'; ctx.lineWidth=1.5; ctx.stroke(); },
+        pivot: {x:36, y:4}, len: 28, default: 0.4, range: [-0.8, 2.2], zBehind: false
+      },
+      legL: {
+        draw(ctx) { ctx.fillStyle = '#fde68a'; ctx.beginPath(); ctx.ellipse(0, 16, 8, 18, -0.1, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#f59e0b'; ctx.lineWidth=1.5; ctx.stroke(); },
+        pivot: {x:-14, y:38}, len: 30, default: -0.15, range: [-1.0, 0.6], zBehind: true
+      },
+      legR: {
+        draw(ctx) { ctx.fillStyle = '#fde68a'; ctx.beginPath(); ctx.ellipse(0, 16, 8, 18, 0.1, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#f59e0b'; ctx.lineWidth=1.5; ctx.stroke(); },
+        pivot: {x:14, y:38}, len: 30, default: 0.15, range: [-0.6, 1.0], zBehind: false
+      }
+    }
+  },
+  boy: {
+    body: {
+      draw(ctx, cx, cy) {
+        ctx.fillStyle = '#92400e';
+        ctx.beginPath(); ctx.ellipse(cx, cy-8, 40, 30, 0, Math.PI, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#fcd5a0';
+        ctx.beginPath(); ctx.ellipse(cx, cy+4, 36, 42, 0, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = '#e8a060'; ctx.lineWidth = 2; ctx.stroke();
+      },
+      mask(cx, cy) { const p = new Path2D(); p.ellipse(cx, cy+4, 36, 42, 0, 0, Math.PI*2); p.ellipse(cx, cy-8, 40, 30, 0, Math.PI, Math.PI*2); return p; }
+    },
+    eyes: {
+      open(ctx, cx, cy) {
+        ctx.fillStyle = '#1e293b';
+        ctx.beginPath(); ctx.arc(cx-13, cy-4, 6, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx+13, cy-4, 6, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'white';
+        ctx.beginPath(); ctx.arc(cx-10, cy-7, 2.5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx+16, cy-7, 2.5, 0, Math.PI*2); ctx.fill();
+      },
+      closed(ctx, cx, cy) {
+        ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.arc(cx-13, cy-4, 5, 0.3, Math.PI-0.3); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx+13, cy-4, 5, 0.3, Math.PI-0.3); ctx.stroke();
+      }
+    },
+    decorations: {
+      draw(ctx, cx, cy) {
+        ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.arc(cx, cy+10, 14, 0.2, Math.PI-0.2); ctx.stroke();
+        ctx.fillStyle = 'rgba(255,150,120,0.45)';
+        ctx.beginPath(); ctx.ellipse(cx-24, cy+12, 9, 6, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(cx+24, cy+12, 9, 6, 0, 0, Math.PI*2); ctx.fill();
+        // 귀
+        ctx.fillStyle = '#92400e';
+        ctx.beginPath(); ctx.ellipse(cx-34, cy-10, 12, 18, -0.3, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(cx+34, cy-10, 12, 18,  0.3, 0, Math.PI*2); ctx.fill();
+      }
+    },
+    limbs: {
+      armL: {
+        draw(ctx) { ctx.fillStyle = '#fcd5a0'; ctx.beginPath(); ctx.ellipse(0, 16, 8, 20, -0.15, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#e8a060'; ctx.lineWidth=1.5; ctx.stroke(); },
+        pivot: {x:-34, y:8}, len: 30, default: -0.4, range: [-2.2, 0.8], zBehind: true
+      },
+      armR: {
+        draw(ctx) { ctx.fillStyle = '#fcd5a0'; ctx.beginPath(); ctx.ellipse(0, 16, 8, 20, 0.15, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#e8a060'; ctx.lineWidth=1.5; ctx.stroke(); },
+        pivot: {x:34, y:8}, len: 30, default: 0.4, range: [-0.8, 2.2], zBehind: false
+      },
+      legL: {
+        draw(ctx) { ctx.fillStyle = '#60a5fa'; ctx.beginPath(); ctx.ellipse(0, 18, 9, 20, -0.1, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#3b82f6'; ctx.lineWidth=1.5; ctx.stroke(); },
+        pivot: {x:-14, y:42}, len: 32, default: -0.15, range: [-1.0, 0.6], zBehind: true
+      },
+      legR: {
+        draw(ctx) { ctx.fillStyle = '#60a5fa'; ctx.beginPath(); ctx.ellipse(0, 18, 9, 20, 0.1, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#3b82f6'; ctx.lineWidth=1.5; ctx.stroke(); },
+        pivot: {x:14, y:42}, len: 32, default: 0.15, range: [-0.6, 1.0], zBehind: false
+      }
+    }
+  },
+  girl: {
+    body: {
+      draw(ctx, cx, cy) {
+        ctx.fillStyle = '#b45309';
+        ctx.beginPath(); ctx.ellipse(cx, cy-8, 40, 28, 0, Math.PI, Math.PI*2); ctx.fill();
+        [[-1],[1]].forEach(([dx]) => {
+          ctx.fillStyle = '#fbbf24';
+          ctx.beginPath(); ctx.arc(cx+dx*30, cy-8, 7, 0, Math.PI*2); ctx.fill();
+          ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 1.5; ctx.stroke();
+        });
+        ctx.fillStyle = '#fcd5a0';
+        ctx.beginPath(); ctx.ellipse(cx, cy+4, 34, 42, 0, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = '#e8a060'; ctx.lineWidth = 2; ctx.stroke();
+      },
+      mask(cx, cy) { const p = new Path2D(); p.ellipse(cx, cy+4, 34, 42, 0, 0, Math.PI*2); return p; }
+    },
+    eyes: {
+      open(ctx, cx, cy) {
+        ctx.fillStyle = '#1e293b';
+        ctx.beginPath(); ctx.ellipse(cx-13, cy-4, 7, 8, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(cx+13, cy-4, 7, 8, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#6366f1';
+        ctx.beginPath(); ctx.ellipse(cx-13, cy-4, 4, 5, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(cx+13, cy-4, 4, 5, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'white';
+        ctx.beginPath(); ctx.arc(cx-10, cy-8, 2.5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx+16, cy-8, 2.5, 0, Math.PI*2); ctx.fill();
+      },
+      closed(ctx, cx, cy) {
+        ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.arc(cx-13, cy-4, 5, 0.3, Math.PI-0.3); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx+13, cy-4, 5, 0.3, Math.PI-0.3); ctx.stroke();
+      }
+    },
+    decorations: {
+      draw(ctx, cx, cy) {
+        ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.arc(cx, cy+10, 12, 0.2, Math.PI-0.2); ctx.stroke();
+        ctx.fillStyle = 'rgba(255,130,150,0.5)';
+        ctx.beginPath(); ctx.ellipse(cx-23, cy+12, 9, 6, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(cx+23, cy+12, 9, 6, 0, 0, Math.PI*2); ctx.fill();
+        // 머리카락 옆
+        ctx.fillStyle = '#b45309';
+        [[-1],[1]].forEach(([dx]) => {
+          ctx.beginPath(); ctx.ellipse(cx+dx*38, cy+12, 10, 28, dx*0.2, 0, Math.PI*2); ctx.fill();
+        });
+      }
+    },
+    limbs: {
+      armL: {
+        draw(ctx) { ctx.fillStyle = '#fcd5a0'; ctx.beginPath(); ctx.ellipse(0, 16, 7, 19, -0.15, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#e8a060'; ctx.lineWidth=1.5; ctx.stroke(); },
+        pivot: {x:-32, y:8}, len: 28, default: -0.4, range: [-2.2, 0.8], zBehind: true
+      },
+      armR: {
+        draw(ctx) { ctx.fillStyle = '#fcd5a0'; ctx.beginPath(); ctx.ellipse(0, 16, 7, 19, 0.15, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#e8a060'; ctx.lineWidth=1.5; ctx.stroke(); },
+        pivot: {x:32, y:8}, len: 28, default: 0.4, range: [-0.8, 2.2], zBehind: false
+      },
+      legL: {
+        draw(ctx) { ctx.fillStyle = '#f9a8d4'; ctx.beginPath(); ctx.ellipse(0, 20, 9, 22, -0.1, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#ec4899'; ctx.lineWidth=1.5; ctx.stroke(); },
+        pivot: {x:-14, y:42}, len: 34, default: -0.15, range: [-1.0, 0.6], zBehind: true
+      },
+      legR: {
+        draw(ctx) { ctx.fillStyle = '#f9a8d4'; ctx.beginPath(); ctx.ellipse(0, 20, 9, 22, 0.1, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#ec4899'; ctx.lineWidth=1.5; ctx.stroke(); },
+        pivot: {x:14, y:42}, len: 34, default: 0.15, range: [-0.6, 1.0], zBehind: false
+      }
+    }
+  },
+  dog: {
+    body: {
+      draw(ctx, cx, cy) {
+        ctx.fillStyle = '#e8a060';
+        ctx.beginPath(); ctx.ellipse(cx, cy, 38, 40, 0, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = '#c8864a'; ctx.lineWidth = 2.5; ctx.stroke();
+        ctx.fillStyle = '#f5c98a';
+        ctx.beginPath(); ctx.ellipse(cx, cy+12, 20, 16, 0, 0, Math.PI*2); ctx.fill();
+      },
+      mask(cx, cy) { const p = new Path2D(); p.ellipse(cx, cy, 38, 40, 0, 0, Math.PI*2); return p; }
+    },
+    eyes: {
+      open(ctx, cx, cy) {
+        ctx.fillStyle = '#1e293b';
+        ctx.beginPath(); ctx.ellipse(cx, cy+4, 8, 6, 0, 0, Math.PI*2); ctx.fill(); // nose
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.beginPath(); ctx.arc(cx-3, cy+2, 2.5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#1e293b';
+        ctx.beginPath(); ctx.arc(cx-14, cy-10, 6, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx+14, cy-10, 6, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'white';
+        ctx.beginPath(); ctx.arc(cx-11, cy-13, 2.5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx+17, cy-13, 2.5, 0, Math.PI*2); ctx.fill();
+      },
+      closed(ctx, cx, cy) {
+        ctx.fillStyle = '#1e293b';
+        ctx.beginPath(); ctx.ellipse(cx, cy+4, 8, 6, 0, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.arc(cx-14, cy-10, 5, 0.3, Math.PI-0.3); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx+14, cy-10, 5, 0.3, Math.PI-0.3); ctx.stroke();
+      }
+    },
+    decorations: {
+      draw(ctx, cx, cy) {
+        ctx.fillStyle = '#f87171';
+        ctx.beginPath(); ctx.ellipse(cx+6, cy+20, 7, 9, 0.2, 0, Math.PI*2); ctx.fill();
+        // 귀
+        ctx.fillStyle = '#c8864a';
+        ctx.beginPath(); ctx.ellipse(cx-36, cy-10, 13, 22, -0.3, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(cx+36, cy-10, 13, 22,  0.3, 0, Math.PI*2); ctx.fill();
+      }
+    },
+    limbs: {
+      armL: {
+        draw(ctx) { ctx.fillStyle = '#c8864a'; ctx.beginPath(); ctx.ellipse(0, 18, 8, 22, -0.15, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#a0693a'; ctx.lineWidth=1.5; ctx.stroke(); },
+        pivot: {x:-34, y:6}, len: 32, default: -0.35, range: [-2.2, 0.8], zBehind: true
+      },
+      armR: {
+        draw(ctx) { ctx.fillStyle = '#c8864a'; ctx.beginPath(); ctx.ellipse(0, 18, 8, 22, 0.15, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#a0693a'; ctx.lineWidth=1.5; ctx.stroke(); },
+        pivot: {x:34, y:6}, len: 32, default: 0.35, range: [-0.8, 2.2], zBehind: false
+      },
+      legL: {
+        draw(ctx) { ctx.fillStyle = '#c8864a'; ctx.beginPath(); ctx.ellipse(0, 16, 8, 18, -0.1, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#a0693a'; ctx.lineWidth=1.5; ctx.stroke(); },
+        pivot: {x:-14, y:34}, len: 28, default: -0.15, range: [-1.0, 0.6], zBehind: true
+      },
+      legR: {
+        draw(ctx) { ctx.fillStyle = '#c8864a'; ctx.beginPath(); ctx.ellipse(0, 16, 8, 18, 0.1, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#a0693a'; ctx.lineWidth=1.5; ctx.stroke(); },
+        pivot: {x:14, y:34}, len: 28, default: 0.15, range: [-0.6, 1.0], zBehind: false
+      }
+    }
+  },
+  rabbit: {
+    body: {
+      draw(ctx, cx, cy) {
+        ctx.fillStyle = '#f5f0ff';
+        ctx.beginPath(); ctx.ellipse(cx, cy+4, 38, 42, 0, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = '#d8b4fe'; ctx.lineWidth = 2; ctx.stroke();
+      },
+      mask(cx, cy) { const p = new Path2D(); p.ellipse(cx, cy+4, 38, 42, 0, 0, Math.PI*2); return p; }
+    },
+    eyes: {
+      open(ctx, cx, cy) {
+        ctx.fillStyle = '#f43f5e';
+        ctx.beginPath(); ctx.arc(cx-13, cy-6, 6, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx+13, cy-6, 6, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'white';
+        ctx.beginPath(); ctx.arc(cx-10, cy-9, 2.5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx+16, cy-9, 2.5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#fda4af';
+        ctx.beginPath(); ctx.ellipse(cx, cy+8, 5, 4, 0, 0, Math.PI*2); ctx.fill();
+      },
+      closed(ctx, cx, cy) {
+        ctx.strokeStyle = '#f43f5e'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.arc(cx-13, cy-6, 5, 0.3, Math.PI-0.3); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx+13, cy-6, 5, 0.3, Math.PI-0.3); ctx.stroke();
+        ctx.fillStyle = '#fda4af';
+        ctx.beginPath(); ctx.ellipse(cx, cy+8, 5, 4, 0, 0, Math.PI*2); ctx.fill();
+      }
+    },
+    decorations: {
+      draw(ctx, cx, cy) {
+        // 귀
+        [[-18, 0.1],[18, -0.1]].forEach(([dx, rot]) => {
+          ctx.fillStyle = '#f5f0ff';
+          ctx.save(); ctx.translate(cx+dx, cy-30); ctx.rotate(rot);
+          ctx.beginPath(); ctx.ellipse(0, 0, 11, 30, 0, 0, Math.PI*2); ctx.fill();
+          ctx.strokeStyle = '#d8b4fe'; ctx.lineWidth = 1.5; ctx.stroke();
+          ctx.fillStyle = '#fda4af';
+          ctx.beginPath(); ctx.ellipse(0, 0, 6, 22, 0, 0, Math.PI*2); ctx.fill();
+          ctx.restore();
+        });
+        // 수염
+        ctx.strokeStyle = '#c4b5fd'; ctx.lineWidth = 1;
+        [[-1],[1]].forEach(([dx]) => {
+          ctx.beginPath(); ctx.moveTo(cx+dx*8, cy+10); ctx.lineTo(cx+dx*28, cy+8); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(cx+dx*8, cy+14); ctx.lineTo(cx+dx*28, cy+14); ctx.stroke();
+        });
+        // 입
+        ctx.strokeStyle = '#f43f5e'; ctx.lineWidth = 1.8; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(cx, cy+12); ctx.lineTo(cx, cy+18); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx, cy+18); ctx.lineTo(cx-8, cy+24); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx, cy+18); ctx.lineTo(cx+8, cy+24); ctx.stroke();
+        // 볼터치
+        ctx.fillStyle = 'rgba(253,164,175,0.45)';
+        ctx.beginPath(); ctx.ellipse(cx-24, cy+10, 9, 6, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(cx+24, cy+10, 9, 6, 0, 0, Math.PI*2); ctx.fill();
+      }
+    },
+    limbs: {
+      armL: {
+        draw(ctx) { ctx.fillStyle = '#f5f0ff'; ctx.beginPath(); ctx.ellipse(0, 14, 7, 17, -0.15, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#d8b4fe'; ctx.lineWidth=1.5; ctx.stroke(); },
+        pivot: {x:-34, y:8}, len: 26, default: -0.4, range: [-2.2, 0.8], zBehind: true
+      },
+      armR: {
+        draw(ctx) { ctx.fillStyle = '#f5f0ff'; ctx.beginPath(); ctx.ellipse(0, 14, 7, 17, 0.15, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#d8b4fe'; ctx.lineWidth=1.5; ctx.stroke(); },
+        pivot: {x:34, y:8}, len: 26, default: 0.4, range: [-0.8, 2.2], zBehind: false
+      },
+      legL: {
+        draw(ctx) { ctx.fillStyle = '#f5f0ff'; ctx.beginPath(); ctx.ellipse(0, 16, 9, 18, -0.1, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#d8b4fe'; ctx.lineWidth=1.5; ctx.stroke(); ctx.fillStyle='#fda4af'; ctx.beginPath(); ctx.ellipse(0, 22, 4, 3, 0, 0, Math.PI*2); ctx.fill(); },
+        pivot: {x:-16, y:38}, len: 30, default: -0.15, range: [-1.0, 0.6], zBehind: true
+      },
+      legR: {
+        draw(ctx) { ctx.fillStyle = '#f5f0ff'; ctx.beginPath(); ctx.ellipse(0, 16, 9, 18, 0.1, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#d8b4fe'; ctx.lineWidth=1.5; ctx.stroke(); ctx.fillStyle='#fda4af'; ctx.beginPath(); ctx.ellipse(0, 22, 4, 3, 0, 0, Math.PI*2); ctx.fill(); },
+        pivot: {x:16, y:38}, len: 30, default: 0.15, range: [-0.6, 1.0], zBehind: false
+      }
+    }
+  }
+};
+
+function resetLimbAngles() {
+  const parts = CHARACTER_PARTS[currentChar];
+  limbAngles = {};
+  for (const [name, limb] of Object.entries(parts.limbs)) {
+    limbAngles[name] = limb.default;
+  }
+}
+
+function drawLimbs() {
+  lctx.clearRect(0, 0, LC.width, LC.height);
+  const cx = LC.width / 2, cy = LC.height / 2;
+  const parts = CHARACTER_PARTS[currentChar];
+  if (!parts) return;
+  // 뒤쪽 먼저
+  for (const [name, limb] of Object.entries(parts.limbs)) {
+    if (limb.zBehind) drawOneLimb(lctx, name, limb, cx, cy);
+  }
+  // 앞쪽
+  for (const [name, limb] of Object.entries(parts.limbs)) {
+    if (!limb.zBehind) drawOneLimb(lctx, name, limb, cx, cy);
+  }
+  // 드래그 중 pivot 하이라이트
+  if (draggingLimb) {
+    const limb = parts.limbs[draggingLimb];
+    lctx.fillStyle = 'rgba(147,51,234,0.4)';
+    lctx.beginPath();
+    lctx.arc(cx + limb.pivot.x, cy + limb.pivot.y, 6, 0, Math.PI*2);
+    lctx.fill();
+  }
+}
+
+function drawOneLimb(ctx, name, limb, cx, cy) {
+  ctx.save();
+  ctx.translate(cx + limb.pivot.x, cy + limb.pivot.y);
+  ctx.rotate(limbAngles[name] || 0);
+  limb.draw(ctx);
+  ctx.restore();
+}
+
+// ── 팔다리 드래그 ──
+function getLimbAtPoint(px, py) {
+  const cx = LC.width / 2, cy = LC.height / 2;
+  const parts = CHARACTER_PARTS[currentChar];
+  let closest = null, closestDist = 35;
+  for (const [name, limb] of Object.entries(parts.limbs)) {
+    const pivotX = cx + limb.pivot.x;
+    const pivotY = cy + limb.pivot.y;
+    const angle = limbAngles[name] || 0;
+    const midX = pivotX + Math.cos(angle) * limb.len / 2;
+    const midY = pivotY + Math.sin(angle) * limb.len / 2;
+    const dist = Math.hypot(px - midX, py - midY);
+    if (dist < closestDist) { closest = name; closestDist = dist; }
+  }
+  return closest;
+}
+
+function limbPointerDown(e) {
+  // 도구 패널 열려있으면 닫기
+  const tb = document.getElementById('tool-bar');
+  if (tb.classList.contains('open')) { togglePalette(); return; }
+
+  const r = LC.getBoundingClientRect();
+  const s = e.touches ? e.touches[0] : e;
+  const px = (s.clientX - r.left) * (LC.width / r.width);
+  const py = (s.clientY - r.top) * (LC.height / r.height);
+  const hit = getLimbAtPoint(px, py);
+  if (hit) {
+    draggingLimb = hit;
+    e.preventDefault();
+  } else {
+    // 팔다리 아님 → 드로잉 이벤트로 전달
+    draggingLimb = null;
+    startDrawing(e);
+  }
+}
+
+function limbPointerMove(e) {
+  if (draggingLimb) {
+    const r = LC.getBoundingClientRect();
+    const s = e.touches ? e.touches[0] : e;
+    const px = (s.clientX - r.left) * (LC.width / r.width);
+    const py = (s.clientY - r.top) * (LC.height / r.height);
+    const cx = LC.width / 2, cy = LC.height / 2;
+    const parts = CHARACTER_PARTS[currentChar];
+    const limb = parts.limbs[draggingLimb];
+    const pivotX = cx + limb.pivot.x;
+    const pivotY = cy + limb.pivot.y;
+    let angle = Math.atan2(py - pivotY, px - pivotX);
+    angle = Math.max(limb.range[0], Math.min(limb.range[1], angle));
+    limbAngles[draggingLimb] = angle;
+    drawLimbs();
+    e.preventDefault();
+  } else if (isDrawing) {
+    doStroke(gp(e));
+  }
+  updateCursor(e);
+}
+
+function limbPointerUp(e) {
+  if (draggingLimb) {
+    draggingLimb = null;
+    drawLimbs();
+  } else {
+    stopDrawing();
+  }
+}
+
+LC.addEventListener('mousedown', limbPointerDown);
+LC.addEventListener('mousemove', limbPointerMove);
+LC.addEventListener('mouseup', limbPointerUp);
+LC.addEventListener('mouseleave', () => { if (isDrawing) stopDrawing(); draggingLimb = null; brushCursor.style.display = 'none'; });
+LC.addEventListener('touchstart', e => { e.preventDefault(); limbPointerDown(e); }, { passive: false });
+LC.addEventListener('touchmove', e => { e.preventDefault(); limbPointerMove(e); }, { passive: false });
+LC.addEventListener('touchend', e => { e.preventDefault(); limbPointerUp(e); }, { passive: false });
+LC.addEventListener('mouseenter', () => { brushCursor.style.display = 'block'; });
 
 // ═══════════════════════════════════════
 // SOUND (Web Audio API)
@@ -161,8 +613,21 @@ function resize() {
     if (DC.width > 0) saved.getContext('2d').drawImage(DC, 0, 0);
     DC.width = dw; DC.height = dh;
     BGC.width = dw; BGC.height = dh;
+    TC.width = dw; TC.height = dh;
+    LC.width = dw; LC.height = dh;
     if (saved.width > 0) dctx.drawImage(saved, 0, 0, saved.width, saved.height, 0, 0, dw, dh);
     drawDrawBg();
+    // 템플릿 + 마스크 + 팔다리 재생성
+    if (currentChar && CHARACTER_PARTS[currentChar]) {
+      const cx = dw / 2, cy = dh / 2;
+      const parts = CHARACTER_PARTS[currentChar];
+      tctx.clearRect(0, 0, dw, dh);
+      parts.body.draw(tctx, cx, cy);
+      parts.decorations.draw(tctx, cx, cy);
+      parts.eyes.open(tctx, cx, cy);
+      bodyMaskPath = parts.body.mask(cx, cy);
+      drawLimbs();
+    }
     spriteBounds = null; spriteCache = null;
   }
   const aw = AC.parentElement.clientWidth, ah = AC.parentElement.clientHeight;
@@ -179,7 +644,7 @@ window.addEventListener('resize', resize);
 // BRUSH CURSOR
 // ═══════════════════════════════════════
 function updateCursor(e) {
-  const r = DC.getBoundingClientRect();
+  const r = LC.getBoundingClientRect();
   const s = e.touches ? e.touches[0] : e;
   const x = s.clientX - r.left;
   const y = s.clientY - r.top;
@@ -198,15 +663,13 @@ function updateCursor(e) {
   }
 }
 
-DC.addEventListener('mouseenter', () => { brushCursor.style.display = 'block'; });
-DC.addEventListener('mouseleave', () => { brushCursor.style.display = 'none'; });
-DC.addEventListener('mousemove', e => updateCursor(e));
+// 커서 이벤트는 limb-canvas에서 처리
 
 // ═══════════════════════════════════════
 // DRAWING (Bezier smoothing)
 // ═══════════════════════════════════════
 function gp(e) {
-  const r = DC.getBoundingClientRect();
+  const r = LC.getBoundingClientRect();
   const sx = DC.width / r.width, sy = DC.height / r.height;
   const s = e.touches ? e.touches[0] : e;
   return { x: (s.clientX - r.left) * sx, y: (s.clientY - r.top) * sy };
@@ -232,12 +695,19 @@ function smoothDraw(p) {
 function doStroke(p) {
   const size = +document.getElementById('bsize').value;
 
+  // 마스크 적용 (있으면 body 안에서만 그리기)
+  if (bodyMaskPath && !isErasing) {
+    dctx.save();
+    dctx.clip(bodyMaskPath);
+  }
+
   if (isErasing) {
     dctx.globalCompositeOperation = 'destination-out';
     dctx.lineWidth = size * 2.5;
     dctx.strokeStyle = 'rgba(0,0,0,1)';
     dctx.lineCap = 'round'; dctx.lineJoin = 'round';
     smoothDraw(p);
+    if (bodyMaskPath && !isErasing) dctx.restore();
     markDrawn(); return;
   }
 
@@ -294,6 +764,7 @@ function doStroke(p) {
   }
 
   lastPt = p;
+  if (bodyMaskPath) dctx.restore();
   markDrawn();
 }
 
@@ -301,6 +772,7 @@ function doSpray() {
   if (!sprayPt) return;
   const size = +document.getElementById('bsize').value;
   const radius = size * 2.8;
+  if (bodyMaskPath) { dctx.save(); dctx.clip(bodyMaskPath); }
   dctx.globalCompositeOperation = 'source-over';
   dctx.fillStyle = color;
   for (let i = 0; i < 18; i++) {
@@ -312,6 +784,7 @@ function doSpray() {
     dctx.fill();
   }
   dctx.globalAlpha = 1;
+  if (bodyMaskPath) dctx.restore();
   markDrawn();
 }
 
@@ -321,10 +794,6 @@ function markDrawn() {
 }
 
 function startDrawing(e) {
-  // 도구 패널 열려있으면 닫기
-  const tb = document.getElementById('tool-bar');
-  if (tb.classList.contains('open')) { togglePalette(); return; }
-
   isDrawing = true; lastPt = null; strokePts = [];
   const p = gp(e);
   strokePts.push(p);
@@ -341,13 +810,7 @@ function stopDrawing() {
   saveHistory();
 }
 
-DC.addEventListener('mousedown', e => startDrawing(e));
-DC.addEventListener('mousemove', e => { if (isDrawing) doStroke(gp(e)); });
-DC.addEventListener('mouseup', stopDrawing);
-DC.addEventListener('mouseleave', () => { if (isDrawing) stopDrawing(); });
-DC.addEventListener('touchstart', e => { e.preventDefault(); startDrawing(e); }, { passive: false });
-DC.addEventListener('touchmove',  e => { e.preventDefault(); if (isDrawing) doStroke(gp(e)); }, { passive: false });
-DC.addEventListener('touchend',   e => { e.preventDefault(); stopDrawing(); }, { passive: false });
+// 드로잉 이벤트는 limb-canvas에서 라우팅 처리
 
 // ═══════════════════════════════════════
 // PALETTE / PEN / BG / COLOR
@@ -386,6 +849,17 @@ function clearDraw() {
   dctx.clearRect(0, 0, DC.width, DC.height);
   spriteBounds = null; spriteCache = null; hasDrawn = false;
   document.getElementById('hint').style.display = '';
+  // 현재 캐릭터 다시 로드 (템플릿+팔다리 유지)
+  if (currentChar && CHARACTER_PARTS[currentChar]) {
+    const cx = DC.width / 2, cy = DC.height / 2;
+    const parts = CHARACTER_PARTS[currentChar];
+    tctx.clearRect(0, 0, TC.width, TC.height);
+    parts.body.draw(tctx, cx, cy);
+    parts.decorations.draw(tctx, cx, cy);
+    parts.eyes.open(tctx, cx, cy);
+    bodyMaskPath = parts.body.mask(cx, cy);
+    drawLimbs();
+  }
   saveHistory();
   playSound('whoosh');
 }
@@ -430,161 +904,43 @@ function loadDraw(input) {
 }
 
 // ═══════════════════════════════════════
-// CHARACTER TEMPLATES
+// CHARACTER TEMPLATES (파트 시스템)
 // ═══════════════════════════════════════
 function loadChar(type, el) {
   if (el) {
     document.querySelectorAll('.cbtn').forEach(b => b.classList.remove('active'));
     el.classList.add('active');
   }
-  clearDraw();
-  const cx = DC.width / 2, cy = DC.height / 2;
-  if (type === 'cat')    drawCat(cx, cy);
-  if (type === 'boy')    drawBoy(cx, cy);
-  if (type === 'girl')   drawGirl(cx, cy);
-  if (type === 'dog')    drawDog(cx, cy);
-  if (type === 'rabbit') drawRabbit(cx, cy);
-  hasDrawn = true; spriteBounds = null; spriteCache = null;
+  currentChar = type;
+  const parts = CHARACTER_PARTS[type];
+  if (!parts) return;
+
+  // 드로잉 캔버스 클리어
+  dctx.clearRect(0, 0, DC.width, DC.height);
+  spriteBounds = null; spriteCache = null; hasDrawn = false;
   document.getElementById('hint').style.display = 'none';
+
+  const cx = DC.width / 2, cy = DC.height / 2;
+
+  // 1. 템플릿 캔버스에 밑그림 (반투명 가이드)
+  tctx.clearRect(0, 0, TC.width, TC.height);
+  parts.body.draw(tctx, cx, cy);
+  parts.decorations.draw(tctx, cx, cy);
+  parts.eyes.open(tctx, cx, cy);
+
+  // 2. 바디 마스크 생성
+  bodyMaskPath = parts.body.mask(cx, cy);
+
+  // 3. 팔다리 초기화 + 렌더링
+  resetLimbAngles();
+  drawLimbs();
+
+  hasDrawn = true;
   saveHistory();
   playSound('pop');
 }
 
-function drawCat(cx, cy) {
-  dctx.fillStyle = '#fde68a';
-  dctx.beginPath(); dctx.ellipse(cx, cy, 38, 46, 0, 0, Math.PI*2); dctx.fill();
-  dctx.strokeStyle = '#f59e0b'; dctx.lineWidth = 2.5; dctx.stroke();
-  dctx.fillStyle = '#1e293b';
-  dctx.beginPath(); dctx.arc(cx-13, cy-10, 5, 0, Math.PI*2); dctx.fill();
-  dctx.beginPath(); dctx.arc(cx+13, cy-10, 5, 0, Math.PI*2); dctx.fill();
-  dctx.fillStyle = 'white';
-  dctx.beginPath(); dctx.arc(cx-10, cy-13, 2, 0, Math.PI*2); dctx.fill();
-  dctx.beginPath(); dctx.arc(cx+16, cy-13, 2, 0, Math.PI*2); dctx.fill();
-  dctx.strokeStyle = '#ef4444'; dctx.lineWidth = 2.5; dctx.lineCap = 'round';
-  dctx.beginPath(); dctx.arc(cx, cy+4, 13, 0.2, Math.PI-0.2); dctx.stroke();
-  dctx.fillStyle = 'rgba(255,182,193,0.55)';
-  dctx.beginPath(); dctx.ellipse(cx-24, cy+6, 9, 6, 0, 0, Math.PI*2); dctx.fill();
-  dctx.beginPath(); dctx.ellipse(cx+24, cy+6, 9, 6, 0, 0, Math.PI*2); dctx.fill();
-  dctx.fillStyle = '#fde68a'; dctx.strokeStyle = '#f59e0b'; dctx.lineWidth = 2;
-  dctx.beginPath(); dctx.ellipse(cx-36, cy-26, 9, 13, -0.4, 0, Math.PI*2); dctx.fill(); dctx.stroke();
-  dctx.beginPath(); dctx.ellipse(cx+36, cy-26, 9, 13,  0.4, 0, Math.PI*2); dctx.fill(); dctx.stroke();
-}
-
-function drawBoy(cx, cy) {
-  dctx.fillStyle = '#92400e';
-  dctx.beginPath(); dctx.ellipse(cx, cy-8, 40, 30, 0, Math.PI, Math.PI*2); dctx.fill();
-  dctx.beginPath(); dctx.ellipse(cx-34, cy-10, 12, 18, -0.3, 0, Math.PI*2); dctx.fill();
-  dctx.beginPath(); dctx.ellipse(cx+34, cy-10, 12, 18,  0.3, 0, Math.PI*2); dctx.fill();
-  dctx.fillStyle = '#fcd5a0';
-  dctx.beginPath(); dctx.ellipse(cx, cy+4, 36, 42, 0, 0, Math.PI*2); dctx.fill();
-  dctx.strokeStyle = '#e8a060'; dctx.lineWidth = 2; dctx.stroke();
-  dctx.fillStyle = '#1e293b';
-  dctx.beginPath(); dctx.arc(cx-13, cy-4, 6, 0, Math.PI*2); dctx.fill();
-  dctx.beginPath(); dctx.arc(cx+13, cy-4, 6, 0, Math.PI*2); dctx.fill();
-  dctx.fillStyle = 'white';
-  dctx.beginPath(); dctx.arc(cx-10, cy-7, 2.5, 0, Math.PI*2); dctx.fill();
-  dctx.beginPath(); dctx.arc(cx+16, cy-7, 2.5, 0, Math.PI*2); dctx.fill();
-  dctx.strokeStyle = '#c0392b'; dctx.lineWidth = 2.5; dctx.lineCap = 'round';
-  dctx.beginPath(); dctx.arc(cx, cy+10, 14, 0.2, Math.PI-0.2); dctx.stroke();
-  dctx.fillStyle = 'rgba(255,150,120,0.45)';
-  dctx.beginPath(); dctx.ellipse(cx-24, cy+12, 9, 6, 0, 0, Math.PI*2); dctx.fill();
-  dctx.beginPath(); dctx.ellipse(cx+24, cy+12, 9, 6, 0, 0, Math.PI*2); dctx.fill();
-  dctx.fillStyle = '#60a5fa';
-  dctx.beginPath(); dctx.roundRect(cx-24, cy+42, 48, 36, [0, 0, 10, 10]); dctx.fill();
-  dctx.strokeStyle = '#3b82f6'; dctx.lineWidth = 2; dctx.stroke();
-}
-
-function drawGirl(cx, cy) {
-  dctx.fillStyle = '#b45309';
-  dctx.beginPath(); dctx.ellipse(cx, cy-8, 40, 28, 0, Math.PI, Math.PI*2); dctx.fill();
-  [[-1],[1]].forEach(([dx]) => {
-    dctx.fillStyle = '#b45309';
-    dctx.beginPath(); dctx.ellipse(cx+dx*38, cy+12, 10, 28, dx*0.2, 0, Math.PI*2); dctx.fill();
-    dctx.fillStyle = '#fbbf24';
-    dctx.beginPath(); dctx.arc(cx+dx*30, cy-8, 7, 0, Math.PI*2); dctx.fill();
-    dctx.strokeStyle = '#f59e0b'; dctx.lineWidth = 1.5; dctx.stroke();
-  });
-  dctx.fillStyle = '#fcd5a0';
-  dctx.beginPath(); dctx.ellipse(cx, cy+4, 34, 42, 0, 0, Math.PI*2); dctx.fill();
-  dctx.strokeStyle = '#e8a060'; dctx.lineWidth = 2; dctx.stroke();
-  dctx.fillStyle = '#1e293b';
-  dctx.beginPath(); dctx.ellipse(cx-13, cy-4, 7, 8, 0, 0, Math.PI*2); dctx.fill();
-  dctx.beginPath(); dctx.ellipse(cx+13, cy-4, 7, 8, 0, 0, Math.PI*2); dctx.fill();
-  dctx.fillStyle = '#6366f1';
-  dctx.beginPath(); dctx.ellipse(cx-13, cy-4, 4, 5, 0, 0, Math.PI*2); dctx.fill();
-  dctx.beginPath(); dctx.ellipse(cx+13, cy-4, 4, 5, 0, 0, Math.PI*2); dctx.fill();
-  dctx.fillStyle = 'white';
-  dctx.beginPath(); dctx.arc(cx-10, cy-8, 2.5, 0, Math.PI*2); dctx.fill();
-  dctx.beginPath(); dctx.arc(cx+16, cy-8, 2.5, 0, Math.PI*2); dctx.fill();
-  dctx.strokeStyle = '#c0392b'; dctx.lineWidth = 2.5; dctx.lineCap = 'round';
-  dctx.beginPath(); dctx.arc(cx, cy+10, 12, 0.2, Math.PI-0.2); dctx.stroke();
-  dctx.fillStyle = 'rgba(255,130,150,0.5)';
-  dctx.beginPath(); dctx.ellipse(cx-23, cy+12, 9, 6, 0, 0, Math.PI*2); dctx.fill();
-  dctx.beginPath(); dctx.ellipse(cx+23, cy+12, 9, 6, 0, 0, Math.PI*2); dctx.fill();
-  dctx.fillStyle = '#f9a8d4';
-  dctx.beginPath(); dctx.roundRect(cx-26, cy+42, 52, 38, [0, 0, 14, 14]); dctx.fill();
-  dctx.strokeStyle = '#ec4899'; dctx.lineWidth = 2; dctx.stroke();
-}
-
-function drawDog(cx, cy) {
-  dctx.fillStyle = '#c8864a';
-  dctx.beginPath(); dctx.ellipse(cx-36, cy+10, 13, 32, -0.3, 0, Math.PI*2); dctx.fill();
-  dctx.beginPath(); dctx.ellipse(cx+36, cy+10, 13, 32,  0.3, 0, Math.PI*2); dctx.fill();
-  dctx.fillStyle = '#e8a060';
-  dctx.beginPath(); dctx.ellipse(cx, cy, 38, 40, 0, 0, Math.PI*2); dctx.fill();
-  dctx.strokeStyle = '#c8864a'; dctx.lineWidth = 2.5; dctx.stroke();
-  dctx.fillStyle = '#f5c98a';
-  dctx.beginPath(); dctx.ellipse(cx, cy+12, 20, 16, 0, 0, Math.PI*2); dctx.fill();
-  dctx.fillStyle = '#1e293b';
-  dctx.beginPath(); dctx.ellipse(cx, cy+4, 8, 6, 0, 0, Math.PI*2); dctx.fill();
-  dctx.fillStyle = 'rgba(255,255,255,0.4)';
-  dctx.beginPath(); dctx.arc(cx-3, cy+2, 2.5, 0, Math.PI*2); dctx.fill();
-  dctx.fillStyle = '#1e293b';
-  dctx.beginPath(); dctx.arc(cx-14, cy-10, 6, 0, Math.PI*2); dctx.fill();
-  dctx.beginPath(); dctx.arc(cx+14, cy-10, 6, 0, Math.PI*2); dctx.fill();
-  dctx.fillStyle = 'white';
-  dctx.beginPath(); dctx.arc(cx-11, cy-13, 2.5, 0, Math.PI*2); dctx.fill();
-  dctx.beginPath(); dctx.arc(cx+17, cy-13, 2.5, 0, Math.PI*2); dctx.fill();
-  dctx.fillStyle = '#f87171';
-  dctx.beginPath(); dctx.ellipse(cx+6, cy+20, 7, 9, 0.2, 0, Math.PI*2); dctx.fill();
-  dctx.fillStyle = '#c8864a';
-  dctx.beginPath(); dctx.ellipse(cx+18, cy-2, 9, 7, 0.4, 0, Math.PI*2); dctx.fill();
-}
-
-function drawRabbit(cx, cy) {
-  [[-18, 0.1],[18, -0.1]].forEach(([dx, rot]) => {
-    dctx.fillStyle = '#f5f0ff';
-    dctx.save(); dctx.translate(cx+dx, cy-30); dctx.rotate(rot);
-    dctx.beginPath(); dctx.ellipse(0, 0, 11, 30, 0, 0, Math.PI*2); dctx.fill();
-    dctx.strokeStyle = '#d8b4fe'; dctx.lineWidth = 1.5; dctx.stroke();
-    dctx.fillStyle = '#fda4af';
-    dctx.beginPath(); dctx.ellipse(0, 0, 6, 22, 0, 0, Math.PI*2); dctx.fill();
-    dctx.restore();
-  });
-  dctx.fillStyle = '#f5f0ff';
-  dctx.beginPath(); dctx.ellipse(cx, cy+4, 38, 42, 0, 0, Math.PI*2); dctx.fill();
-  dctx.strokeStyle = '#d8b4fe'; dctx.lineWidth = 2; dctx.stroke();
-  dctx.fillStyle = '#f43f5e';
-  dctx.beginPath(); dctx.arc(cx-13, cy-6, 6, 0, Math.PI*2); dctx.fill();
-  dctx.beginPath(); dctx.arc(cx+13, cy-6, 6, 0, Math.PI*2); dctx.fill();
-  dctx.fillStyle = 'white';
-  dctx.beginPath(); dctx.arc(cx-10, cy-9, 2.5, 0, Math.PI*2); dctx.fill();
-  dctx.beginPath(); dctx.arc(cx+16, cy-9, 2.5, 0, Math.PI*2); dctx.fill();
-  dctx.fillStyle = '#fda4af';
-  dctx.beginPath(); dctx.ellipse(cx, cy+8, 5, 4, 0, 0, Math.PI*2); dctx.fill();
-  dctx.strokeStyle = '#f43f5e'; dctx.lineWidth = 1.8; dctx.lineCap = 'round';
-  dctx.beginPath(); dctx.moveTo(cx, cy+12); dctx.lineTo(cx, cy+18); dctx.stroke();
-  dctx.beginPath(); dctx.moveTo(cx, cy+18); dctx.lineTo(cx-8, cy+24); dctx.stroke();
-  dctx.beginPath(); dctx.moveTo(cx, cy+18); dctx.lineTo(cx+8, cy+24); dctx.stroke();
-  dctx.strokeStyle = '#c4b5fd'; dctx.lineWidth = 1;
-  [[-1],[1]].forEach(([dx]) => {
-    dctx.beginPath(); dctx.moveTo(cx+dx*8, cy+10); dctx.lineTo(cx+dx*28, cy+8);  dctx.stroke();
-    dctx.beginPath(); dctx.moveTo(cx+dx*8, cy+14); dctx.lineTo(cx+dx*28, cy+14); dctx.stroke();
-  });
-  dctx.fillStyle = 'rgba(253,164,175,0.45)';
-  dctx.beginPath(); dctx.ellipse(cx-24, cy+10, 9, 6, 0, 0, Math.PI*2); dctx.fill();
-  dctx.beginPath(); dctx.ellipse(cx+24, cy+10, 9, 6, 0, 0, Math.PI*2); dctx.fill();
-}
+// (캐릭터 그리기 함수는 CHARACTER_PARTS로 이동됨)
 
 // ═══════════════════════════════════════
 // PALETTE TOGGLE
@@ -702,11 +1058,40 @@ function getBounds() {
 }
 
 function updateSpriteCache() {
-  if (!spriteBounds) spriteBounds = getBounds();
+  // 합성 캔버스: body 색칠 + decorations + eyes (팔다리 제외)
+  const parts = CHARACTER_PARTS[currentChar];
+  const cw = DC.width, ch = DC.height;
+  const cx = cw / 2, cy = ch / 2;
+
+  const comp = document.createElement('canvas');
+  comp.width = cw; comp.height = ch;
+  const cctx = comp.getContext('2d');
+
+  // body 배경 (색칠 뒤에 보이게)
+  if (parts) parts.body.draw(cctx, cx, cy);
+  // 유저 색칠
+  cctx.drawImage(DC, 0, 0);
+  // decorations
+  if (parts) parts.decorations.draw(cctx, cx, cy);
+  // eyes는 blink 때문에 animLoop에서 직접 그림
+
+  // bounds 계산
+  const d = cctx.getImageData(0, 0, cw, ch).data;
+  let x0 = cw, x1 = 0, y0 = ch, y1 = 0, found = false;
+  for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
+    if (d[(y * cw + x) * 4 + 3] > 15) {
+      found = true;
+      if (x < x0) x0 = x; if (x > x1) x1 = x;
+      if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+  }
+  if (!found) { x0 = cx-40; y0 = cy-50; x1 = cx+40; y1 = cy+50; }
+  spriteBounds = { x: x0, y: y0, w: x1-x0+1, h: y1-y0+1 };
+
   const b = spriteBounds;
   spriteCache = document.createElement('canvas');
   spriteCache.width = b.w; spriteCache.height = b.h;
-  spriteCache.getContext('2d').drawImage(DC, b.x, b.y, b.w, b.h, 0, 0, b.w, b.h);
+  spriteCache.getContext('2d').drawImage(comp, b.x, b.y, b.w, b.h, 0, 0, b.w, b.h);
 }
 
 // ═══════════════════════════════════════
@@ -1060,6 +1445,52 @@ function getPhysics(t, m) {
 }
 
 // ═══════════════════════════════════════
+// LIMB PHYSICS (애니메이션 시 팔다리 흔들기)
+// ═══════════════════════════════════════
+function getLimbPhysics(time, m) {
+  const iv = intensity;
+  const base = { ...limbAngles };
+
+  if (m === 'walk') {
+    const speed = 3.0 + iv * 3.5;
+    const swing = Math.sin(time * speed) * 0.6 * iv;
+    base.armL = (limbAngles.armL || 0) + swing;
+    base.armR = (limbAngles.armR || 0) - swing;
+    base.legL = (limbAngles.legL || 0) - swing * 0.7;
+    base.legR = (limbAngles.legR || 0) + swing * 0.7;
+  } else if (m === 'jump') {
+    const freq = 0.8 + iv * 2.2;
+    const period = (2 * Math.PI) / freq;
+    const phase = ((time % period) / period);
+    const lift = Math.sin(phase * Math.PI) * 1.0 * iv;
+    base.armL = (limbAngles.armL || 0) - lift;
+    base.armR = (limbAngles.armR || 0) + lift;
+    base.legL = (limbAngles.legL || 0) + lift * 0.3;
+    base.legR = (limbAngles.legR || 0) - lift * 0.3;
+  } else if (m === 'excited') {
+    const swing = Math.sin(time * 12) * 0.8 * iv;
+    const swing2 = Math.cos(time * 9) * 0.5 * iv;
+    base.armL = (limbAngles.armL || 0) + swing;
+    base.armR = (limbAngles.armR || 0) - swing;
+    base.legL = (limbAngles.legL || 0) - swing2;
+    base.legR = (limbAngles.legR || 0) + swing2;
+  }
+  return base;
+}
+
+function drawAnimLimb(ctx, name, limb, physics) {
+  ctx.save();
+  // 팔다리 위치를 body bounds 기준으로 계산
+  const b = spriteBounds;
+  const offsetX = limb.pivot.x;
+  const offsetY = limb.pivot.y - b.h / 2;
+  ctx.translate(offsetX, offsetY);
+  ctx.rotate(physics[name] || 0);
+  limb.draw(ctx);
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════
 // EMOTION INDICATORS
 // ═══════════════════════════════════════
 function drawEmotion(ctx, x, y, m, time) {
@@ -1119,12 +1550,51 @@ function animLoop(timestamp) {
   // 스프라이트 그리기 (캐시 사용)
   if (!spriteCache) updateSpriteCache();
   const b = spriteBounds;
+  const parts = CHARACTER_PARTS[currentChar];
+
+  // 눈 깜빡임 업데이트
+  blinkTimer += dt;
+  if (blinkState === 'open' && blinkTimer > 2.5 + Math.random() * 2) {
+    blinkState = 'closed'; blinkTimer = 0;
+  } else if (blinkState === 'closed' && blinkTimer > 0.15) {
+    blinkState = 'open'; blinkTimer = 0;
+  }
+
+  // 팔다리 물리
+  const limbPhys = getLimbPhysics(t, mode);
 
   actx.save();
   actx.translate(charX, y);
   actx.rotate(rot);
   actx.scale(charVx < 0 ? -sx : sx, sy);
+
+  // 뒤쪽 팔다리
+  if (parts) {
+    for (const [name, limb] of Object.entries(parts.limbs)) {
+      if (limb.zBehind) drawAnimLimb(actx, name, limb, limbPhys);
+    }
+  }
+
+  // 몸통 스프라이트
   actx.drawImage(spriteCache, -b.w / 2, -b.h, b.w, b.h);
+
+  // 눈 (깜빡임)
+  if (parts) {
+    const ecx = 0, ecy = -b.h / 2;
+    if (blinkState === 'closed') {
+      parts.eyes.closed(actx, ecx, ecy);
+    } else {
+      parts.eyes.open(actx, ecx, ecy);
+    }
+  }
+
+  // 앞쪽 팔다리
+  if (parts) {
+    for (const [name, limb] of Object.entries(parts.limbs)) {
+      if (!limb.zBehind) drawAnimLimb(actx, name, limb, limbPhys);
+    }
+  }
+
   actx.restore();
 
   // 감정 이모션
