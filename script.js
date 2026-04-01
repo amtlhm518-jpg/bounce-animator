@@ -1166,6 +1166,20 @@ try {
   screen.orientation.lock('landscape').catch(() => {});
 } catch(e) {}
 
+// 세로로 들고 있으면 회전 안내 표시
+function checkOrientation() {
+  const rotateMsg = document.getElementById('rotate-msg');
+  if (!rotateMsg) return;
+  if (window.innerHeight > window.innerWidth && window.innerWidth < 600) {
+    rotateMsg.classList.add('show');
+  } else {
+    rotateMsg.classList.remove('show');
+  }
+}
+window.addEventListener('resize', checkOrientation);
+window.addEventListener('orientationchange', checkOrientation);
+setTimeout(checkOrientation, 500);
+
 // ═══════════════════════════════════════
 // PWA Service Worker
 // ═══════════════════════════════════════
